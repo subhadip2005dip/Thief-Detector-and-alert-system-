@@ -1,0 +1,142 @@
+#define BLYNK_TEMPLATE_ID "TMPL3TyvU-uxb"
+#define BLYNK_TEMPLATE_NAME "ESP8266 Notifications"
+#define BLYNK_AUTH_TOKEN "UTrwia-fZ1t7ueoFAbjmO05p-0YlOT8q"
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+
+#define TRIGGER_PIN D1
+#define ECHO_PIN D2
+#define IR_SENSOR_PIN D5
+#define RED_LED D6
+#define GREEN_LED D7
+
+
+#define MAX_DISTANCE 30 
+
+char auth[] = BLYNK_AUTH_TOKEN; 
+char ssid[] = "SUDIPTA SAHA";      
+char pass[] = "bolbo naa";    
+
+int distance;
+bool irDetected;
+bool ultrasonicTriggered;
+bool alertActive = false;
+bool someoneApproaching = false;
+bool objectLifted = false;
+
+
+int ULTRASONIC_THRESHOLD = 10; 
+
+
+#define VPIN_DISTANCE V0    
+#define VPIN_IR_STATUS V1   
+#define VPIN_ALERT_STATUS V2 
+
+void setup() {
+
+  Serial.begin(9600);
+  
+
+  pinMode(TRIGGER_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(IR_SENSOR_PIN, INPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+  
+
+  digitalWrite(GREEN_LED, HIGH);
+  digitalWrite(RED_LED, LOW);
+  
+
+  Blynk.begin(auth, ssid, pass);
+  Serial.println("Connecting to Blynk...");
+  
+
+  Blynk.virtualWrite(VPIN_DISTANCE, 0);
+  Blynk.virtualWrite(VPIN_IR_STATUS, 0);
+  Blynk.virtualWrite(VPIN_ALERT_STATUS, 0);
+  
+  Serial.println("Smart Cupboard Protector Initialized");
+  Serial.println("System is active and monitoring...");
+}
+
+void loop() {
+  Blynk.run(); 
+  
+
+  digitalWrite(TRIGGER_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN, LOW);
+  
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  distance = duration * 0.034 / 2; // Calculate distance in cm
+  
+  if (distance <= 0 || distance > MAX_DISTANCE) {
+    distance = MAX_DISTANCE; // Handle out of range readings
+  }
+  
+
+  ultrasonicTriggered = (distance > 0 && distance < ULTRASONIC_THRESHOLD);
+  
+
+  irDetected = digitalRead(IR_SENSOR_PIN) == HIGH;
+  
+
+  Blynk.virtualWrite(VPIN_DISTANCE, distance);
+  Blynk.virtualWrite(VPIN_IR_STATUS, irDetected ? 1 : 0);
+  
+
+  if (ultrasonicTriggered && !someoneApproaching) {
+    Serial.println("Someone is approaching the cupboard!");
+    someoneApproaching = true;
+  } else if (!ultrasonicTriggered && someoneApproaching) {
+    Serial.println("Person has moved away from cupboard.");
+    someoneApproaching = false;
+  }
+  
+
+  if (irDetected && !objectLifted) {
+    Serial.println("Churi Hoye Gechee!!!");
+    objectLifted = true;
+  } else if (!irDetected && objectLifted) {
+    Serial.println("Object has been returned to shelf.");
+    objectLifted = false;
+  }
+  
+  
+  if (ultrasonicTriggered && irDetected) {
+    // THEFT DETECTED: Hand in range AND object lifted
+    digitalWrite(GREEN_LED, LOW);   
+    digitalWrite(RED_LED, HIGH);   
+    
+    // Update Blynk alert status
+    if (!alertActive) {
+      Blynk.virtualWrite(VPIN_ALERT_STATUS, 1); 
+      alertActive = true;
+      Serial.println("🚨 ALERT: Theft in progress! 🚨");
+    }
+  } else {
+
+    digitalWrite(GREEN_LED, HIGH);  
+    digitalWrite(RED_LED, LOW);      
+    
+ 
+    if (alertActive) {
+      Blynk.virtualWrite(VPIN_ALERT_STATUS, 0); // Reset alert status
+      alertActive = false;
+      Serial.println("Alert cleared. All safe now.");
+    }
+  }
+  
+
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+  
+
+  delay(1000);
+}
